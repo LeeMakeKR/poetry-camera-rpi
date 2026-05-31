@@ -1,12 +1,12 @@
 ## 소프트웨어
-이 코드는 현재 OpenAI의 모델을 사용해서 이미지를 시로 변환합니다. 또한 [Adafruit의 열감지식 프린터 Python 라이브러리](https://github.com/adafruit/Python-Thermal-Printer)의 프린터 드라이버를 사용합니다.
+이 코드는 현재 Google의 Gemini 모델을 사용해서 이미지를 시로 변환합니다. 또한 [Adafruit의 열감지식 프린터 Python 라이브러리](https://github.com/adafruit/Python-Thermal-Printer)의 프린터 드라이버를 사용합니다.
 
-[OpenAI 계정 & API 키](https://openai.com/index/openai-api)를 받아야 합니다. 각 요청은 몇 센트가 소요됩니다.
+[Google AI Studio 계정 & Gemini API 키](https://aistudio.google.com/)를 받아야 합니다. 특정 한도 내에서 무료로 이용할 수 있습니다.
 
 현재 파이에서 실행 중인 `main.py` 스크립트:
 - 셔터 버튼을 클릭할 때 사진을 찍습니다
-- 사진을 GPT-4 Vision에 보내서 사진에 캡션을 달도록 합니다
-- 캡션을 받으면, GPT-4에 캡션을 시로 변환하도록 요청합니다
+- 사진을 Gemini 모델에 보내서 사진에 캡션을 달도록 합니다
+- 캡션을 받으면, Gemini 모델에 캡션을 시로 변환하도록 요청합니다
 - 시를 받으면, 열감지식 영수증 프린터에서 시를 인쇄합니다
 
 
@@ -62,13 +62,14 @@ $ cd
 $ git clone https://github.com/carolynz/poetry-camera-rpi.git
 ```
 
-4. 열감지식 프린터를 설정하고 전원과 파이에 연결합니다. [이 튜토리얼의 다이어그램 및 지침을 참조하세요.](https://learn.adafruit.com/networked-thermal-printer-using-cups-and-raspberry-pi/connect-and-configure-printer)
-   작동하는지 테스트합니다. 프린터의 보드 레이트(예: `19200`)에 주의하세요. 나중에 이것을 사용할 것입니다.
-
-5. `poetry-camera-rpi` 디렉토리를 엽니다:
+4. 복제한 `poetry-camera-rpi` 디렉토리로 이동한 후, `requirements.txt` 파일을 참조하여 필요한 파이썬 패키지들을 설치합니다:
 ```shell
 $ cd poetry-camera-rpi
+$ pip install -r requirements.txt
 ```
+
+5. 열감지식 프린터를 설정하고 전원과 파이에 연결합니다. [이 튜토리얼의 다이어그램 및 지침을 참조하세요.](https://learn.adafruit.com/networked-thermal-printer-using-cups-and-raspberry-pi/connect-and-configure-printer)
+   작동하는지 테스트합니다. 프린터의 보드 레이트(예: `19200`)에 주의하세요. 나중에 이것을 사용할 것입니다.
 
 6. *만약* 프린터의 보드 레이트가 `19200`과 다르다면, `main.py`를 열고 그 번호를 프린터의 보드 레이트로 바꾸세요:
 ```shell
@@ -81,15 +82,15 @@ printer = Adafruit_Thermal('/dev/serial0', 19200, timeout=5)
 [TODO] 프린터가 작동하는지 테스트하는 설정 스크립트가 필요합니다
 
 ### 파트 3. AI 설정
-1. OpenAI 계정을 설정하고 API 키를 생성합니다.
+1. Google AI Studio 계정을 설정하고 Gemini API 키를 생성합니다.
 
-2. Poetry Camera 코드가 있는 디렉토리로 이동하고 `.env` 파일을 만듭니다. 이 파일은 OpenAI API 키와 같은 민감한 세부 정보를 저장합니다:
+2. Poetry Camera 코드가 있는 디렉토리로 이동하고 `.env` 파일을 만듭니다. 이 파일은 Gemini API 키와 같은 민감한 세부 정보를 저장합니다:
 ```nano .env```
 
 3. .env에 API 키를 추가합니다:
-```OPENAI_API_KEY=pasteyourAPIkeyhere```
+```GEMINI_API_KEY=pasteyourAPIkeyhere```
 
-[TODO] openai 테스트 스크립트 추가
+[TODO] gemini 테스트 스크립트 추가
 
 
 ### 파트 4. 엔드-투-엔드로 작동하게 하기

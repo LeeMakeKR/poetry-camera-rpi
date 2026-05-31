@@ -4,11 +4,13 @@
 이 프로젝트는 https://github.com/bokito-studio/poetry-camera-rpi의 포크로 시작했습니다. 해당 프로젝트가 진행이 멈춰 진행이 되지 않아 프로젝트를 최신 패키지에 맞게 업데이트하고, 한글로 구현하는 것을 목표로 합니다.
 
 ## 필요한 하드웨어
-- 라즈베리 파이 제로 2w
-- 라즈베리 파이용 카메라
-- 영수증 프린터
-- 전원장치
-- 스위치 등
+자세한 하드웨어 부품 목록과 배선/핀맵 구성에 대한 상세 정보는 [hardware_setup.md](file:///d:/GithubProject/poetry-camera-rpi/hardware_setup.md) 문서를 참고해 주세요.
+
+- 라즈베리 파이 제로 2 W (Raspberry Pi Zero 2 W)
+- 라즈베리 파이용 카메라 및 제로 전용 케이블
+- TTL 써멀 영수증 프린터 (CSN-A2-T 혹은 호환 모델)
+- 전원 공급 장치 (이중 전원 스플리터/어댑터 구성 권장)
+- 조작용 버튼 (셔터, 종료 버튼 등) 및 상태 표시 LED
 
 
 
