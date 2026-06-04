@@ -1,4 +1,11 @@
 ## 소프트웨어
+
+# 라즈베리 파이 이미지 설치
+
+# ssh 접속
+
+
+
 이 코드는 현재 Google의 Gemini 모델을 사용해서 이미지를 시로 변환합니다. 또한 [Adafruit의 열감지식 프린터 Python 라이브러리](https://github.com/adafruit/Python-Thermal-Printer)의 프린터 드라이버를 사용합니다.
 
 [Google AI Studio 계정 & Gemini API 키](https://aistudio.google.com/)를 받아야 합니다. 특정 한도 내에서 무료로 이용할 수 있습니다.
