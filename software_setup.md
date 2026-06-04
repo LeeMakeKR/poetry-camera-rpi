@@ -1,14 +1,21 @@
 ## 소프트웨어
 
-# 라즈베리 파이 이미지 설치
-
-# ssh 접속
-
-
-
 이 코드는 현재 Google의 Gemini 모델을 사용해서 이미지를 시로 변환합니다. 또한 [Adafruit의 열감지식 프린터 Python 라이브러리](https://github.com/adafruit/Python-Thermal-Printer)의 프린터 드라이버를 사용합니다.
 
 [Google AI Studio 계정 & Gemini API 키](https://aistudio.google.com/)를 받아야 합니다. 특정 한도 내에서 무료로 이용할 수 있습니다.
+
+
+## 라즈베리 파이 설정 (`sudo raspi-config`)
+터미널에서 아래 명령어를 실행하여 필요한 하드웨어 기능을 활성화하세요:
+```shell
+sudo raspi-config
+```
+
+- **Serial Port** (프린터): **ON** (`3 Interface Options` -> `I6 Serial Port` -> 시리얼 로그인 셸 `No` -> 시리얼 하드웨어 `Yes` 선택)
+- **Serial Console** (시리얼 콘솔): **OFF** (위 설정에 포함됨)
+
+![raspi-config 설정 화면](pics/2026-06-04%20151615.png)
+
 
 현재 파이에서 실행 중인 `main.py` 스크립트:
 - 셔터 버튼을 클릭할 때 사진을 찍습니다
@@ -17,50 +24,14 @@
 - 시를 받으면, 열감지식 영수증 프린터에서 시를 인쇄합니다
 
 
-# 모두 함께 모으기
-다음 튜토리얼에서 개선했습니다:
-- [라즈베리 파이와 열감지식 프린터를 사용한 인스턴트 카메라](https://learn.adafruit.com/instant-camera-using-raspberry-pi-and-thermal-printer)
-- [라즈베리 파이와 CUPS를 사용한 네트워크 열감지식 프린터](https://learn.adafruit.com/networked-thermal-printer-using-cups-and-raspberry-pi)
-
-### 파트 1. 라즈베리 파이 & 카메라가 작동하는지 확인
-1. 라즈베리 파이를 카메라 모듈에 연결합니다.
-
-2. 파이에 새로 설치한 라즈베리 파이 OS가 있는 SD 카드를 삽입합니다.
-
-3. 파이를 미니 HDMI로 모니터에 연결합니다.
-
-5. 전원을 연결합니다. 파이에 녹색 불이 보이고 모니터에 시작 화면이 표시되어야 합니다.
-
-7. 파이가 켜지면 파이에서 터미널을 열어서 변경을 시작합니다.
-
-8. 카메라 & 시리얼 입력에 대해 라즈베리 파이 하드웨어를 설정합니다:
-```shell
-sudo raspi-config
-```
-
-9. 다음 설정을 조정하고 싶을 것입니다:
-    - 글래머: ON (최신 버전의 Raspbian OS에서 카메라 설정용)
-    - 시리얼 포트: ON (영수증 프린터 입력에 액세스할 수 있습니다)
-    - 시리얼 콘솔: OFF (이것이 무엇인지 모르겠습니다)
-
-    필요에 따라 시스템을 재시작합니다.
-
-[튜토리얼 TODO: 기본 카메라 테스트 스크립트 포함 & 원하는 동작 표시]
 
 ### 파트 2. 프린터가 작동하는지 확인
 1. 시스템을 업데이트하고 요구 사항을 설치합니다. 이 모든 것이 필요한지 확실하지 않습니다. 나중에 이것을 다시 살펴보고 불필요한 것을 제거할 수 있습니다.
-```shell
-$ sudo apt-get update
-$ sudo apt-get install git cups build-essential libcups2-dev libcupsimage2-dev python3-serial python-pil python-unidecode
+
 ```
 
 2. Adafruit 열감지식 프린터를 작동시키기 위해 필요한 소프트웨어를 설치합니다.
-```shell
-$ cd
-$ git clone https://github.com/adafruit/zj-58
-$ cd zj-58
-$ make
-$ sudo ./install
+
 ```
 
 3. Poetry Camera 소프트웨어가 포함된 이 저장소를 복제합니다:
