@@ -16,6 +16,8 @@ sudo raspi-config
 
 ![raspi-config 설정 화면](pics/2026-06-04%20151615.png)
 
+##2026.06 기준. 라즈베리 파이 업데이트에 따라 설정 방법이 다를 수 있습니다. 
+
 
 현재 파이에서 실행 중인 `main.py` 스크립트:
 - 셔터 버튼을 클릭할 때 사진을 찍습니다
@@ -69,6 +71,9 @@ printer = Adafruit_Thermal('/dev/serial0', 19200, timeout=5)
 ```GEMINI_API_KEY=pasteyourAPIkeyhere```
 
 [TODO] gemini 테스트 스크립트 추가
+### 폰트 설정
+네이버 나눔손글씨 https://hangeul.naver.com/font 를 사용합니다. 
+### 시인 설정
 
 
 ### 파트 4. 엔드-투-엔드로 작동하게 하기
