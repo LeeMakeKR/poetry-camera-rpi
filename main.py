@@ -7,12 +7,19 @@
 import time, requests, signal, os, replicate
 
 from picamera2 import Picamera2, Preview
-from gpiozero import LED, Button
+from gpiozero import Button
 from Adafruit_Thermal import *
 from wraptext import *
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
+
+try:
+  import board
+  import neopixel
+except ImportError:
+  board = None
+  neopixel = None
 
 #load API keys from .env
 load_dotenv()
@@ -32,7 +39,35 @@ time.sleep(2) # warmup period since first few frames are often poor quality
 #instantiate buttons
 shutter_button = Button(16) # REPLACE WTH YOUR OWN BUTTON PINS
 power_button = Button(26, hold_time = 2) #REPLACE WITH YOUR OWN BUTTON PINS
-led = LED(20)
+
+# WS2812 status LED setup (DIN on GPIO18 / physical pin 12)
+PIXEL_COUNT = int(os.getenv('WS2812_NUM_PIXELS', '1'))
+PIXEL_BRIGHTNESS = float(os.getenv('WS2812_BRIGHTNESS', '0.2'))
+status_pixel = None
+
+if board and neopixel:
+  try:
+    status_pixel = neopixel.NeoPixel(
+      board.D18,
+      PIXEL_COUNT,
+      brightness=PIXEL_BRIGHTNESS,
+      auto_write=True,
+      pixel_order=neopixel.GRB,
+    )
+    status_pixel.fill((0, 0, 0))
+  except Exception as e:
+    print('WS2812 init failed, continuing without status LED:', e)
+else:
+  print('WS2812 libraries not found, continuing without status LED')
+
+
+def set_status_led(color):
+  if status_pixel is not None:
+    status_pixel.fill(color)
+
+
+def clear_status_led():
+  set_status_led((0, 0, 0))
 
 # prompts
 system_prompt = """You are a poet. You specialize in elegant and emotionally impactful poems. 
@@ -54,8 +89,8 @@ poem_format = "8 line free verse"
 # CORE PHOTO-TO-POEM FUNCTION
 #############################
 def take_photo_and_print_poem():
-  # blink LED in a background thread
-  led.blink()
+  # Blue while taking photo + generating poem
+  set_status_led((0, 0, 64))
 
   # Take photo & save it
   metadata = picam2.capture_file('/home/carolynz/CamTest/images/image.jpg')
@@ -108,7 +143,7 @@ def take_photo_and_print_poem():
   print_poem(poem)
 
   print_footer()
-  led.off()
+  clear_status_led()
 
   return
 
@@ -195,7 +230,7 @@ def print_footer():
 def shutdown():
   print('shutdown button held for 2s')
   print('shutting down now')
-  led.off()
+  clear_status_led()
   os.system('sudo shutdown -h now')
 
 ################################
@@ -205,7 +240,7 @@ def shutdown():
 #################################
 def handle_keyboard_interrupt(sig, frame):
   print('Ctrl+C received, stopping script')
-  led.off()
+  clear_status_led()
 
   #weird workaround I found from rpi forum to shut down script without crashing the pi
   os.kill(os.getpid(), signal.SIGUSR1)
@@ -217,8 +252,8 @@ signal.signal(signal.SIGINT, handle_keyboard_interrupt)
 # Button handlers
 #################
 def handle_pressed():
-  led.on()
-  led.off()
+  set_status_led((64, 64, 64))
+  clear_status_led()
   print("button pressed!")
   take_photo_and_print_poem()
 
