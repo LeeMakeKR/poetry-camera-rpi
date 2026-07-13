@@ -85,13 +85,6 @@ $ pip install -r requirements.txt
 5. 열감지식 프린터를 설정하고 전원과 파이에 연결합니다. [이 튜토리얼의 다이어그램 및 지침을 참조하세요.](https://learn.adafruit.com/networked-thermal-printer-using-cups-and-raspberry-pi/connect-and-configure-printer)
    작동하는지 테스트합니다. 프린터의 보드 레이트(예: `19200`)에 주의하세요. 나중에 이것을 사용할 것입니다.
 
-6. *만약* 프린터의 보드 레이트가 `19200`과 다르다면, `main.py`를 열고 그 번호를 프린터의 보드 레이트로 바꾸세요:
-```shell
-# main.py:
-
-# 프린터 인스턴스 만들기
-printer = Adafruit_Thermal('/dev/serial0', 19200, timeout=5)
-```
 
 [TODO] 프린터가 작동하는지 테스트하는 설정 스크립트가 필요합니다
 

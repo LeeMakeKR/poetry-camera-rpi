@@ -48,7 +48,7 @@ def create_korean_text_image(text, font_path, font_size=48, width=384):
         font = ImageFont.load_default()
 
     # 텍스트 크기 계산
-    # PIL 9.0+ bbox 사용, 이전 버전은 textsize 사용
+    # PIL 9.0+에서는 bbox를 사용하고, 이전 버전은 textsize를 사용
     try:
         bbox = font.getbbox(text)
         text_width = bbox[2] - bbox[0]

@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 import sys
 import os
 
-# 상위 디렉토리의 Adafruit_Thermal 모듈 import
+# 상위 디렉토리의 Adafruit_Thermal 모듈 가져오기
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from Adafruit_Thermal import *
 
@@ -49,7 +49,7 @@ def create_korean_text_image(text, font_size=24, font_path='/usr/share/fonts/tru
     padding = 20
     img_height = text_height + padding * 2
     
-    # 흑백 이미지 생성 (1-bit, 255=흰색 배경)
+    # 흑백 이미지 생성 (1비트, 255=흰색 배경)
     img = Image.new('1', (printer_width, img_height), 255)
     draw = ImageDraw.Draw(img)
     
@@ -145,7 +145,7 @@ def test_mixed_text():
     printer.println('\n')
     printer.justify('C')
     
-    # 영문은 기본 printer.println 사용
+    # 영문은 기본 printer.println으로 출력
     printer.setSize('M')
     printer.println('Poetry Camera')
     printer.setSize('S')

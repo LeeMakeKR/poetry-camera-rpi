@@ -1,8 +1,8 @@
-# takeFrom picamera2 examples: capture_jpeg.py 
+# picamera2 예제 capture_jpeg.py를 기반으로 함
 #!/usr/bin/python3
 
-# Capture a JPEG while still running in the preview mode. When you
-# capture to a file, the return value is the metadata for that image.
+# 프리뷰 모드가 실행 중인 상태에서 JPEG를 캡처합니다.
+# 파일로 캡처하면 반환값은 해당 이미지의 메타데이터입니다.
 
 import time, requests, signal, os, base64, random, glob
 
@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
 
-# python-escpos 사용 시도, 실패 시 Adafruit_Thermal 사용
+# python-escpos를 우선 시도하고, 실패하면 Adafruit_Thermal 사용
 try:
     from escpos.printer import Serial
     printer = Serial('/dev/serial0', baudrate=19200, timeout=5)
@@ -28,8 +28,8 @@ try:
     print("✅ python-escpos로 프린터 연결 성공")
 except ImportError:
     print("❌ python-escpos가 설치되지 않음. Adafruit_Thermal로 대체 시도...")
-    #instantiate printer
-    baud_rate = 19200 # Set to 19200 for most thermal printers
+    # 프린터 초기화
+    baud_rate = 19200 # 대부분의 감열 프린터는 19200 보드레이트를 사용
     printer = Adafruit_Thermal('/dev/serial0', baud_rate, timeout=5)
     USE_ESCPOS = False
     print("⚠️  Adafruit_Thermal 사용 (이미지 출력 제한적)")
@@ -39,17 +39,17 @@ except Exception as e:
     printer = None
     USE_ESCPOS = False
 
-#load API keys from .env
+# .env에서 API 키 불러오기
 load_dotenv()
 genai.configure(api_key=os.environ['GOOGLE_API_KEY'])
 
-#instantiate camera
+# 카메라 초기화
 picam2 = Picamera2()
-# start camera
+# 카메라 시작
 picam2.start()
-time.sleep(2) # warmup period since first few frames are often poor quality
+time.sleep(2) # 처음 몇 프레임의 품질이 낮을 수 있어 예열 시간을 둠
 
-#instantiate buttons (bounce_time 추가로 버튼 바운싱 방지)
+# 버튼 초기화 (bounce_time 추가로 버튼 바운싱 방지)
 shutter_button = Button(16, bounce_time=0.1) # 셔터 버튼 GPIO16, 100ms 바운스 타임
 # power_button = Button(26, hold_time = 2) # 파워 버튼 미지정 - 주석 처리
 led = LED(26) # LED GPIO26
@@ -130,7 +130,7 @@ poem_format = "8줄 자유시 (한국어)"
 
 
 #############################
-# CORE PHOTO-TO-POEM FUNCTION
+# 핵심 사진-시 변환 함수
 #############################
 def take_photo_and_print_poem():
   global is_processing
@@ -144,39 +144,39 @@ def take_photo_and_print_poem():
   print("📸 사진 촬영 및 시 생성 시작...")
   
   try:
-    # blink LED in a background thread
+    # 백그라운드에서 LED 점멸 시작
     led.blink()
 
-    # Ensure the directory exists
+    # 저장 디렉터리가 존재하도록 보장
     image_path = '/home/pashiran/CamTest/images/image.jpg'
     os.makedirs(os.path.dirname(image_path), exist_ok=True)
 
-    # Take photo & save it
+    # 사진을 촬영하고 저장합니다
     metadata = picam2.capture_file(image_path)
 
-    # FOR DEBUGGING: print metadata
+    # 디버깅용: 메타데이터 출력
     #print(metadata)
 
-    # Close camera -- commented out because this can only happen at end of program
+    # 카메라 종료는 프로그램 마지막에만 가능해서 주석 처리
     # picam2.close()
 
-    # FOR DEBUGGING: note that image has been saved
+    # 디버깅용: 이미지 저장 완료 표시
     print('----- SUCCESS: image saved locally')
 
     #########################
-    # Use Google Gemini API to analyze image and generate poem
+    # Google Gemini API로 이미지를 분석하고 시를 생성
     #########################
 
-    # Load the image
+    # 이미지 불러오기
     img = Image.open(image_path)
 
-    # Create Gemini model (using gemini-2.5-flash for speed and quality balance)
+    # Gemini 모델 생성(속도와 품질 균형을 위해 gemini-2.5-flash 사용)
     model = genai.GenerativeModel('models/gemini-2.5-flash')
 
     # 한 줄에 들어갈 글자수 계산
     chars_per_line = calculate_chars_per_line()
     
-    # Gemini용 프롬프트 생성 (이미지 분석 + 한국어 시 생성 통합)
+    # Gemini용 프롬프트 생성 (이미지 분석과 한국어 시 생성을 통합)
     prompt = f"""{system_prompt}
 
 제공된 이미지를 기반으로 다음 형식으로 한국어 시를 작성하세요: {poem_format}
@@ -219,16 +219,16 @@ def take_photo_and_print_poem():
       print('------------------')
       print('✅ 시 생성 완료! 이제 프린터로 출력합니다...')
       
-      # API 응답을 받은 후 전체 출력 시작
+    # API 응답을 받은 뒤 전체 출력 시작
       print_header()
       
-      # 헤더와 시 사이 구분선
+    # 헤더와 시 사이 구분선
       print_separator()
       
       # 시 출력
       print_poem(poem)
       
-      # 시와 푸터 사이 구분선
+    # 시와 푸터 사이 구분선
       print_separator()
       
       # 푸터 출력
@@ -263,18 +263,18 @@ def take_photo_and_print_poem():
 
 
 #######################
-# This function is no longer needed with Gemini API
-# (kept for reference but not used)
+# 이 함수는 Gemini API 사용 시 더 이상 필요하지 않음
+# (참고용으로만 남겨두며 실제로는 사용하지 않음)
 #######################
 def generate_prompt(image_description):
-  # This function is deprecated when using Gemini
-  # Gemini processes image and generates poem in one call
+    # Gemini 사용 시 이 함수는 더 이상 권장되지 않음
+    # Gemini는 한 번의 호출로 이미지 분석과 시 생성을 모두 처리함
   pass
 
 
 
 ###########################
-# KOREAN TEXT IMAGE FUNCTIONS
+# 한글 텍스트 이미지 함수
 ###########################
 
 def get_random_korean_font():
@@ -410,7 +410,7 @@ def print_korean_text(text, font_size=48):
         print(f"❌ 한글 출력 실패: {text} - {e}")
 
 ###########################
-# RECEIPT PRINTER FUNCTIONS
+# 영수증 프린터 함수
 ###########################
 
 def print_separator():
@@ -530,7 +530,7 @@ def print_poem(poem):
             print(f"❌ 백업 출력도 실패: {e2}")
 
 
-# print date/time/location header
+# 날짜/시간 헤더 출력
 def print_header():
     """헤더 출력 (날짜/시간)"""
     if not printer:
@@ -538,7 +538,7 @@ def print_header():
         return
         
     try:
-        # Get current date+time -- will use for printing and file naming
+        # 현재 날짜와 시간을 가져와 출력과 파일명에 사용
         now = datetime.now()
 
         # 중앙 정렬
@@ -555,7 +555,7 @@ def print_header():
         elif hasattr(printer, 'println'):
             printer.println('\n')
 
-        # Format printed datetime 
+        # 출력용 날짜/시간 형식 지정
         date_string = now.strftime('%Y년 %m월 %d일')
         time_string = now.strftime('%H:%M')
         
@@ -563,7 +563,7 @@ def print_header():
         print_korean_text(date_string)
         print_korean_text(time_string)
 
-        # optical spacing adjustments
+        # 시각적 간격 조정
         if USE_ESCPOS and hasattr(printer, 'text'):
             printer.text('\n')
         elif hasattr(printer, 'setLineHeight'):
@@ -581,7 +581,7 @@ def print_header():
         print(f"❌ 헤더 출력 실패: {e}")
 
 
-# print footer
+# 푸터 출력
 def print_footer():
     """푸터 출력"""
     if not printer:
@@ -626,7 +626,7 @@ def print_footer():
 
 
 ##############
-# POWER BUTTON
+# 전원 버튼
 ##############
 def shutdown():
   print('shutdown button held for 2s')
@@ -635,22 +635,22 @@ def shutdown():
   os.system('sudo shutdown -h now')
 
 ################################
-# For RPi debugging:
-# Handle Ctrl+C script termination gracefully
-# (Otherwise, it shuts down the entire Pi -- bad)
+# Raspberry Pi 디버깅용:
+# Ctrl+C로 스크립트를 안전하게 종료합니다
+# (그렇지 않으면 Pi 전체가 종료될 수 있음)
 #################################
 def handle_keyboard_interrupt(sig, frame):
   print('Ctrl+C received, stopping script')
   led.off()
 
-  #weird workaround I found from rpi forum to shut down script without crashing the pi
+    # Pi가 비정상 종료되지 않도록 RPi 포럼에서 찾은 우회 방법
   os.kill(os.getpid(), signal.SIGUSR1)
 
 signal.signal(signal.SIGINT, handle_keyboard_interrupt)
 
 
 #################
-# Button handlers
+# 버튼 핸들러
 #################
 def handle_pressed():
   """셔터 버튼이 눌렸을 때 실행"""
@@ -664,7 +664,7 @@ def handle_held():
 
 
 ################################
-# LISTEN FOR BUTTON PRESS EVENTS
+# 버튼 입력 이벤트 대기
 ################################
 
 # 프로그램 시작 시 폰트 선택 (한 번만)
