@@ -1,0 +1,32 @@
+[Unit]
+Description=Poetry Camera
+# 시 생성에 인터넷이 필요하므로 네트워크가 올라온 뒤 시작합니다.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# WS2812 가 /dev/mem 에 접근하므로 root 로 실행해야 합니다.
+# 권한이 없으면 예외가 아니라 세그멘테이션 폴트로 죽습니다.
+User=root
+WorkingDirectory=/home/poetry/poetry-camera-rpi/python
+
+# 패키지가 사용자 홈에 설치되어 있어 root 환경에서는 경로를 알려줘야 합니다.
+Environment=PYTHONPATH=/home/poetry/.local/lib/python3.13/site-packages
+Environment=PYTHONUNBUFFERED=1
+
+# API 키가 없으면 아예 시작하지 않습니다. 키를 넣기 전에 자동 실행이 켜져
+# 헛돌지 않도록 하는 안전장치입니다.
+ExecStartPre=/usr/bin/test -s /home/poetry/poetry-camera-rpi/.env
+
+# wifi_networks.txt 의 와이파이 프로필을 NetworkManager 에 등록합니다.
+# 실패해도 본체는 실행되도록 앞에 - 를 붙였습니다.
+ExecStartPre=-/usr/bin/python3 /home/poetry/poetry-camera-rpi/python/wifi_apply.py
+
+ExecStart=/usr/bin/python3 /home/poetry/poetry-camera-rpi/python/main.py
+
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

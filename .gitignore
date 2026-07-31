@@ -1,5 +1,12 @@
-images/
-smallertest.py
 __pycache__/
 errors.txt
+AGENTS.md
+CLAUDE.md
+
+# API 키 등 비밀값. 템플릿인 .env.example 만 저장소에 남깁니다.
 .env
+.env.*
+!.env.example
+
+# 와이파이 비밀번호. 템플릿인 wifi_networks.example.txt 만 남깁니다.
+wifi_networks.txt

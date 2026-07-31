@@ -159,6 +159,47 @@ time.sleep(len(payload) * 11.0 / baud + height * printer.dotPrintTime)
 2. `python3 testcode/testUartLoopback.py` — 핀 8과 핀 10을 점퍼선으로 직결한 뒤 실행. PASS면 파이 UART는 정상
 3. 위 둘이 모두 정상인데 인쇄가 안 되면 남는 원인은 TX/RX 반전 또는 GND 공통 누락뿐입니다
 
+## 폴더 구조
+
+```text
+python/          실행 코드 (main.py, thermal_raster.py, Adafruit_Thermal.py)
+fonts/           한글 폰트 (nanum, nanum_handwriting)
+images/          촬영본 보관. 파일명은 촬영 시각 (20260731_145213.jpg)
+testcode/        하드웨어 검증 스크립트
+testcode/reference/  정리 전 원본 코드 스냅샷 (실행용 아님)
+```
+
+`python/main.py` 는 자신의 상위 폴더를 저장소 루트로 보고 `fonts/` 와 `images/` 를 찾습니다. 폴더를 옮기면 이 관계가 유지되는지 확인하세요.
+
+## 실행
+
+**반드시 sudo 로 실행합니다.**
+
+```bash
+sudo -E PYTHONPATH=/home/poetry/.local/lib/python3.13/site-packages \
+  python3 ~/poetry-camera-rpi/python/main.py
+```
+
+`main.py` 를 임포트하는 테스트 스크립트(`testKoreanPrint.py`, `testStatusLed.py`)도 마찬가지로 sudo 가 필요합니다.
+
+### sudo 가 필수인 이유
+
+WS2812 를 구동하는 `rpi_ws281x` 는 `/dev/mem` 에 접근합니다. 권한이 없으면 파이썬 예외를 던지는 대신 **프로세스를 세그멘테이션 폴트로 죽입니다.**
+
+```text
+Failed to create mailbox device
+: Operation not permitted
+Segmentation fault        (종료 코드 139)
+```
+
+파이썬 `try/except` 로는 막을 수 없습니다. 실행 중 아무 메시지 없이 죽는다면 sudo 를 빠뜨린 것입니다.
+
+프린터와 카메라 자체는 sudo 없이도 동작하므로, LED 를 쓰지 않는 테스트(`testThermalPrint.py`, `testCamera.py` 등)는 일반 권한으로 실행해도 됩니다.
+
+`PYTHONPATH` 를 함께 넘기는 이유는 패키지가 `~/.local` 에 설치되어 있어 root 환경에서 보이지 않기 때문입니다.
+
+`.env` 파일에 `GOOGLE_API_KEY` 가 있어야 시가 생성됩니다. 설정 방법은 `api_setup.md` 를 보세요.
+
 ## 참고
 
 - 실제 사용 시에는 코드에서 해당 GPIO를 참조하도록 함께 맞춰야 합니다.
@@ -166,3 +207,5 @@ time.sleep(len(payload) * 11.0 / baud + height * printer.dotPrintTime)
   - `testThermalPrint.py` : 기본 출력 확인
   - `testThermal.py` : 보레이트/농도/스타일 전체 진단
   - `testUartLoopback.py` : 파이 UART 자체 점검
+  - `testKoreanPrint.py` : API 키 없이 한글 시 인쇄 경로만 확인
+  - `testCamera.py`, `testCameraPrint.py` : 촬영 및 사진 인쇄
