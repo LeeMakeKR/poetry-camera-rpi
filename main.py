@@ -30,6 +30,12 @@ REPLICATE_API_TOKEN = os.environ['REPLICATE_API_TOKEN']
 baud_rate = 9600 # REPLACE WITH YOUR OWN BAUD RATE
 printer = Adafruit_Thermal('/dev/serial0', baud_rate, timeout=5)
 
+# ESC 7 n1 n2 n3: max heating dots, heating time, heating interval.
+# heattime 255 tested darkest without smearing on this printer; library
+# default is 120. Passing heattime= to the constructor raises TypeError on
+# pyserial 3.5, so the command is issued directly after instantiation.
+printer.writeBytes(27, 55, 11, 255, 40)
+
 #instantiate camera
 picam2 = Picamera2()
 # start camera
