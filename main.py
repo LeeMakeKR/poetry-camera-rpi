@@ -20,7 +20,7 @@ try:
 except ImportError:
   board = None
   neopixel = None
-
+저
 #load API keys from .env
 load_dotenv()
 openai_client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
