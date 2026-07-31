@@ -13,6 +13,7 @@ from serial import Serial
 WIDTH_DOTS = 384  # 58mm 감열지 기준 도트 폭
 WIDTH_BYTES = WIDTH_DOTS // 8
 MAX_CHUNK_ROWS = 128  # 한 번에 보낼 최대 행 수. 프린터 버퍼 보호용.
+CHUNK_SETTLE = 0.05   # 청크 사이 여유. 버퍼가 비워질 시간을 조금 줍니다.
 
 
 def fit_width(image):
@@ -55,7 +56,13 @@ def print_raster(printer, rows, baud):
         printer.timeoutWait()
         Serial.write(printer, payload)
         Serial.flush(printer)
-        time.sleep(len(payload) * 11.0 / baud + height * printer.dotPrintTime)
+
+        # 전송 시간과 인쇄 시간은 겹칩니다. 9600bps 로 한 행(48바이트)을
+        # 보내는 데 55ms 가 걸리는데 인쇄기는 그보다 훨씬 빨라 항상 전송이
+        # 병목입니다. 둘을 더하면 인쇄 시간만큼 그냥 놀게 됩니다.
+        transmit = len(payload) * 11.0 / baud
+        mechanical = height * printer.dotPrintTime
+        time.sleep(max(transmit, mechanical) + CHUNK_SETTLE)
 
     printer.timeoutSet(0)
 

@@ -49,6 +49,12 @@ IMAGE_DIR = os.path.join(BASE_DIR, "images")
 BODY_FONT_SIZE = 48
 TITLE_FONT_SIZE = 53
 
+# 9600bps 에서는 보내는 도트 수가 곧 인쇄 시간입니다.
+# 빈 여백도 그대로 전송되므로 최소한만 둡니다.
+BLOCK_MARGIN = 6  # 덩어리 위아래 여백 (도트)
+LINE_GAP = 6      # 줄 사이 간격 (도트)
+TEXT_MARGIN = 10  # 좌측 여백 (도트)
+
 # 상태 표시 색상
 # 부팅~초기화: 빨강 고정 -> 준비 완료: 초록 고정
 # 촬영/시 생성: 초록 점멸 -> 인쇄: 파랑 점멸 -> 완료: 다시 초록 고정
@@ -298,45 +304,56 @@ def calculate_chars_per_line(font_size=BODY_FONT_SIZE, width=WIDTH_DOTS):
 ###########################
 
 
-def create_korean_text_image(text, font_size=BODY_FONT_SIZE, width=WIDTH_DOTS):
-    """한글 한 줄을 볼드 흑백 이미지로 그립니다."""
+def create_korean_block_image(lines, font_size=BODY_FONT_SIZE, width=WIDTH_DOTS):
+    """여러 줄을 하나의 흑백 이미지로 그립니다.
+
+    9600bps 에서는 보내는 바이트 수가 곧 인쇄 시간입니다. 줄마다 이미지를
+    따로 만들면 위아래 여백이 줄 수만큼 반복되어 전체의 절반 가까이가 빈
+    흰 공간이 됩니다. 한 덩어리로 그려 여백을 한 번만 넣습니다.
+    """
     font = load_font(font_size)
 
     try:
-        bbox = font.getbbox(text)
-        bbox_top, bbox_bottom = bbox[1], bbox[3]
+        ascent, descent = font.getmetrics()
     except Exception:
-        bbox_top, bbox_bottom = 0, font_size
+        ascent, descent = font_size, int(font_size * 0.25)
 
-    vertical_margin = int(font_size * 0.4)
-    # 볼드 효과 2픽셀을 더해 글자가 잘리지 않게 합니다.
-    height = max(bbox_bottom - bbox_top + vertical_margin * 2 + 4, 40)
+    line_height = ascent + descent
+    height = BLOCK_MARGIN * 2 + line_height * len(lines) + LINE_GAP * (len(lines) - 1)
 
-    image = Image.new("RGB", (width, height), "white")
+    image = Image.new("RGB", (width, max(height, 8)), "white")
     draw = ImageDraw.Draw(image)
 
-    x = 10
-    y = vertical_margin - bbox_top + 2
-
-    # 1픽셀씩 어긋나게 네 번 그려 굵기를 만듭니다.
-    for dx in range(2):
-        for dy in range(2):
-            draw.text((x + dx, y + dy), text, font=font, fill="black")
+    y = BLOCK_MARGIN
+    for line in lines:
+        # 1픽셀씩 어긋나게 네 번 그려 굵기를 만듭니다.
+        for dx in range(2):
+            for dy in range(2):
+                draw.text((TEXT_MARGIN + dx, y + dy), line, font=font, fill="black")
+        y += line_height + LINE_GAP
 
     return image.convert("1")
 
 
-def print_korean_text(text, font_size=BODY_FONT_SIZE):
-    """한글 한 줄을 이미지로 만들어 라스터 명령으로 인쇄합니다."""
+def print_korean_lines(lines, font_size=BODY_FONT_SIZE):
+    """여러 줄을 한 번의 라스터 전송으로 인쇄합니다."""
     if printer is None:
-        print("프린터 없음: %s" % text)
+        print("프린터 없음: %s" % " / ".join(lines))
+        return
+
+    if not lines:
         return
 
     try:
-        image = create_korean_text_image(text, font_size=font_size)
+        image = create_korean_block_image(lines, font_size=font_size)
         print_image(printer, image, PRINTER_BAUD)
     except Exception as exc:
-        print("한글 출력 실패 (%s): %s" % (text, exc))
+        print("한글 출력 실패 (%s): %s" % (" / ".join(lines), exc))
+
+
+def print_korean_text(text, font_size=BODY_FONT_SIZE):
+    """한 줄짜리 편의 함수."""
+    print_korean_lines([text], font_size=font_size)
 
 
 ###########################
@@ -364,9 +381,11 @@ def print_header():
     try:
         now = datetime.now()
         printer.justify("C")
-        printer.println()
-        print_korean_text(now.strftime("%Y년 %m월 %d일"))
-        print_korean_text(now.strftime("%H:%M"))
+        # 날짜와 시각을 한 덩어리로 보내 전송량을 줄입니다.
+        print_korean_lines([
+            now.strftime("%Y년 %m월 %d일"),
+            now.strftime("%H:%M"),
+        ])
         printer.justify("L")
     except Exception as exc:
         print("헤더 출력 실패: %s" % exc)
@@ -401,9 +420,9 @@ def print_poem(poem):
     if current:
         stanzas.append(current)
 
+    # 연 단위로 한 번에 보냅니다. 줄마다 보내면 여백이 줄 수만큼 반복됩니다.
     for index, stanza in enumerate(stanzas):
-        for line in stanza:
-            print_korean_text(line)
+        print_korean_lines(stanza)
         if index < len(stanzas) - 1:
             printer.feed(1)
 
@@ -415,8 +434,6 @@ def print_footer():
         printer.justify("C")
         print_korean_text("이 시는 AI가 작성했습니다")
         printer.println()
-        printer.println("Explore the archives at")
-        printer.println("poetry.camera")
         printer.justify("L")
         # 손으로 뜯을 여백을 확보합니다.
         printer.feed(5)
