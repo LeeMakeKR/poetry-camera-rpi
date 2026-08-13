@@ -14,6 +14,7 @@ WIDTH_DOTS = 384  # 58mm 감열지 기준 도트 폭
 WIDTH_BYTES = WIDTH_DOTS // 8
 MAX_CHUNK_ROWS = 128  # 한 번에 보낼 최대 행 수. 프린터 버퍼 보호용.
 CHUNK_SETTLE = 0.05   # 청크 사이 여유. 버퍼가 비워질 시간을 조금 줍니다.
+DEFAULT_LINE_SPACING = 32  # 프린터 기본 줄간격 (문자 24 + 여백 8)
 
 
 def fit_width(image):
@@ -37,7 +38,15 @@ def to_raster_rows(mono):
 
 
 def print_raster(printer, rows, baud):
-    """행 목록을 GS v 0 명령으로 인쇄합니다."""
+    """행 목록을 GS v 0 명령으로 인쇄합니다.
+
+    프린터 기본 줄간격은 32도트(문자 24 + 여백 8)입니다. 라스터 명령이
+    끝날 때마다 이 여분 8도트가 따라붙어 이미지 사이가 약 1mm 벌어집니다.
+    인쇄 동안만 줄간격을 0으로 두고 끝나면 기본값으로 되돌립니다.
+    """
+    # ESC 3 n : 줄간격을 n 도트로 설정
+    printer.writeBytes(27, 51, 0)
+
     for start in range(0, len(rows), MAX_CHUNK_ROWS):
         chunk = rows[start:start + MAX_CHUNK_ROWS]
         height = len(chunk)
@@ -64,6 +73,8 @@ def print_raster(printer, rows, baud):
         mechanical = height * printer.dotPrintTime
         time.sleep(max(transmit, mechanical) + CHUNK_SETTLE)
 
+    # 이후의 텍스트 출력과 feed() 가 정상 간격을 갖도록 기본값으로 되돌립니다.
+    printer.writeBytes(27, 51, DEFAULT_LINE_SPACING)
     printer.timeoutSet(0)
 
 

@@ -23,15 +23,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 NETWORKS_FILE = BASE_DIR / "wifi_networks.txt"
 EXAMPLE_FILE = BASE_DIR / "wifi_networks.example.txt"
 
+# 부팅 파티션은 FAT32 라 SD 카드를 PC 에 꽂으면 그대로 보입니다.
+# 와이파이가 끊겨 SSH 로 들어갈 수 없을 때 여기에 파일을 넣어 복구합니다.
+BOOT_NETWORKS_FILE = Path("/boot/firmware/wifi_networks.txt")
 
-def load_networks():
-    if not NETWORKS_FILE.exists():
-        print("%s 가 없어 와이파이 설정을 건너뜁니다." % NETWORKS_FILE.name)
-        print("  cp %s %s 후 편집하세요." % (EXAMPLE_FILE, NETWORKS_FILE))
-        return []
 
+def parse_networks(path):
     networks = []
-    for line in NETWORKS_FILE.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -44,6 +43,37 @@ def load_networks():
         ssid, password = parts[0], parts[1]
         priority = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
         networks.append((ssid, password, priority))
+
+    return networks
+
+
+def load_networks():
+    """저장소 루트와 부팅 파티션 양쪽에서 읽습니다.
+
+    같은 이름이 양쪽에 있으면 부팅 파티션 쪽이 이깁니다. 복구용으로 넣은
+    값이 옛 설정에 덮이지 않도록 하기 위해서입니다.
+    """
+    networks = []
+
+    if NETWORKS_FILE.exists():
+        networks.extend(parse_networks(NETWORKS_FILE))
+    else:
+        print("%s 가 없습니다." % NETWORKS_FILE)
+        print("  cp %s %s 후 편집하세요." % (EXAMPLE_FILE, NETWORKS_FILE))
+
+    if BOOT_NETWORKS_FILE.exists():
+        boot_networks = parse_networks(BOOT_NETWORKS_FILE)
+        if boot_networks:
+            print("부팅 파티션에서 %d개를 읽었습니다: %s"
+                  % (len(boot_networks), BOOT_NETWORKS_FILE))
+            print("  주의: 이 파일은 SD 카드를 꽂으면 누구나 읽을 수 있습니다.")
+            print("  접속이 복구되면 지우세요: sudo rm %s" % BOOT_NETWORKS_FILE)
+
+        # 뒤에 오는 항목이 앞을 덮도록 이름 기준으로 합칩니다.
+        merged = {ssid: (ssid, pw, pr) for ssid, pw, pr in networks}
+        for entry in boot_networks:
+            merged[entry[0]] = entry
+        networks = list(merged.values())
 
     return networks
 
