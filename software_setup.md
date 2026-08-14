@@ -177,10 +177,13 @@ sudo -E PYTHONPATH=/home/poetry/.local/lib/python3.13/site-packages \
 | 부팅/초기화 | 빨강 고정 |
 | 촬영 대기 | 초록 고정 |
 | 촬영·시 생성 | 초록 점멸 |
+| **요청 한도 대기** | **노랑 점멸** |
 | 인쇄 중 | 파랑 점멸 |
 | 완료 | 초록 고정 |
 | 오류 | 빨강 2초 후 초록 복귀 |
 | **와이파이 없음** | **빨강 점멸** |
+
+노랑 점멸은 Gemini 요청 한도(429)에 걸려 기다리는 중입니다. 5초, 15초, 45초 간격으로 3번까지 다시 시도한 뒤 초록 점멸로 돌아갑니다. 그동안 셔터 버튼은 받지 않습니다.
 
 초록 고정 상태에서 셔터 버튼을 눌러 시가 인쇄되면 여기까지 성공입니다. 촬영본은 `images/` 에 촬영 시각 이름으로 쌓입니다.
 
@@ -250,6 +253,8 @@ sudo systemctl restart poetry-camera.service
 | 서비스가 계속 재시작됨 | `journalctl -u poetry-camera.service` 로 원인 확인. `.env` 누락이면 `ExecStartPre` 에서 멈춥니다 |
 | 카메라를 못 엶 | 서비스가 이미 점유 중일 수 있습니다. `sudo systemctl stop poetry-camera.service` 후 재시도 |
 | LED 가 빨강으로 계속 점멸 | 와이파이 미연결입니다. 휴대폰 핫스팟을 켜거나 `nmcli device wifi list` 로 신호를 확인하세요 |
+| LED 가 노랑으로 점멸 | Gemini 요청 한도(429)입니다. 그대로 두면 알아서 다시 시도합니다 |
+| `일일 요청 한도를 다 썼습니다` | 오늘은 기다려도 안 풀립니다. <https://aistudio.google.com/apikey> 에서 한도를 확인하세요 |
 | 와이파이를 등록했는데 안 붙음 | `sudo python3 python/wifi_apply.py` 를 실행했는지, 이름과 비밀번호 앞뒤에 공백이 없는지 확인하세요 |
 | SSH 로 접속조차 안 됨 | SD 카드를 PC 에 꽂아 `bootfs` 드라이브에 `wifi_networks.txt` 를 넣고 재부팅하세요 |
 

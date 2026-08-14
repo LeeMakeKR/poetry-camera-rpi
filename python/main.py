@@ -642,6 +642,63 @@ def generate_poem(model, parts):
             status_led.blink(COLOR_CAPTURE)
 
 
+def describe_error(exc):
+    """오류를 종이에 적을 원인과 해결 방법으로 바꿉니다.
+
+    LED 색만으로는 와이파이가 끊긴 건지 API 키가 틀린 건지 알 수 없어,
+    파이에 SSH 로 들어가야만 이유를 알 수 있었습니다.
+
+    문구가 영어인 이유는 프린터 내장 폰트가 PC936(중국어)이라 한글이 아예
+    찍히지 않기 때문입니다. 한글을 내려면 폰트로 이미지를 그려야 하는데,
+    폰트나 렌더링이 고장 난 경우에도 오류만은 나와야 해서 내장 폰트를 씁니다.
+    한 줄에 32칸이므로 문구를 그 안에 맞춥니다.
+    """
+    text = str(exc)
+
+    if isinstance(exc, google_exceptions.ResourceExhausted):
+        if is_daily_quota(text):
+            return "DAILY LIMIT REACHED", "TRY AGAIN TOMORROW"
+        return "TOO MANY REQUESTS", "WAIT A MINUTE AND RETRY"
+
+    if isinstance(exc, (google_exceptions.Unauthenticated,
+                        google_exceptions.PermissionDenied)):
+        return "API KEY REJECTED", "CHECK GOOGLE_API_KEY IN .env"
+
+    if isinstance(exc, (google_exceptions.ServiceUnavailable,
+                        google_exceptions.DeadlineExceeded)):
+        return "SERVER NOT RESPONDING", "TRY AGAIN LATER"
+
+    if isinstance(exc, OSError):
+        return "NO INTERNET", "CHECK WIFI"
+
+    # 여기까지 오면 예상 못 한 오류입니다. 종류 이름이라도 남겨야
+    # 나중에 로그를 볼 때 어디를 봐야 할지 알 수 있습니다.
+    return "UNEXPECTED ERROR", type(exc).__name__[:32]
+
+
+def print_error_receipt(cause, remedy):
+    """오류 원인을 종이에 인쇄합니다. 프린터가 죽었으면 조용히 넘어갑니다.
+
+    폰트도 라스터 변환도 거치지 않고 내장 폰트로만 찍습니다. 그래야
+    폰트가 없거나 이미지 출력이 깨진 상황에서도 이유가 종이에 남습니다.
+    """
+    if printer is None:
+        return
+
+    try:
+        printer.justify("L")
+        printer.println(SEPARATOR_LINE)
+        printer.println("POEM FAILED")
+        printer.println(cause)
+        printer.println(remedy)
+        printer.println(datetime.now().strftime("%Y-%m-%d %H:%M"))
+        printer.println(SEPARATOR_LINE)
+        printer.feed(3)
+    except Exception as exc:
+        # 오류를 알리다 또 실패해도 원래 오류 처리를 막으면 안 됩니다.
+        print("오류 안내 출력 실패: %s" % exc)
+
+
 def take_photo_and_print_poem():
     global is_processing
     global SELECTED_FONT_PATH
@@ -651,7 +708,9 @@ def take_photo_and_print_poem():
         return
 
     if not has_network():
-        # 네트워크 없이는 시를 만들 수 없으므로 촬영하지 않고 빨강 점멸만 남깁니다.
+        # 네트워크 없이는 시를 만들 수 없으므로 촬영하지 않습니다.
+        # 빨강 점멸만으로는 이유를 알 수 없어 종이에도 남깁니다.
+        print_error_receipt("NO INTERNET", "CHECK WIFI")
         set_ready_state()
         return
 
@@ -699,6 +758,8 @@ def take_photo_and_print_poem():
 
     except Exception as exc:
         print("처리 중 오류: %s" % exc)
+        cause, remedy = describe_error(exc)
+        print_error_receipt(cause, remedy)
         status_led.solid(COLOR_ERROR)
         time.sleep(2)
     finally:
