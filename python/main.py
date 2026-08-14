@@ -11,6 +11,7 @@
 import glob
 import os
 import random
+import re
 import signal
 import socket
 import sys
@@ -20,6 +21,7 @@ from datetime import datetime
 
 import google.generativeai as genai
 from dotenv import load_dotenv
+from google.api_core import exceptions as google_exceptions
 from gpiozero import Button
 from PIL import Image, ImageDraw, ImageFont
 from picamera2 import Picamera2
@@ -62,7 +64,15 @@ COLOR_BOOT = (64, 0, 0)
 COLOR_IDLE = (0, 32, 0)
 COLOR_CAPTURE = (0, 48, 0)
 COLOR_PRINT = (0, 0, 64)
+COLOR_RETRY = (48, 32, 0)  # 노랑. 요청 한도에 걸려 기다리는 중
 COLOR_ERROR = (64, 0, 0)
+
+# 요청 한도(429)에 걸렸을 때 다시 시도하기까지의 간격입니다.
+# 분당 한도는 대개 첫 대기에서 풀립니다.
+RETRY_DELAYS = (5, 15, 45)
+# 서버가 알려 준 대기 시간이 이보다 길면 기다리지 않고 포기합니다.
+# 셔터를 누른 사람을 몇 분씩 세워 둘 수는 없습니다.
+MAX_RETRY_WAIT = 60
 
 # 네트워크가 끊기면 빨강 점멸로 알립니다. 시 생성에 인터넷이 필요합니다.
 NETWORK_CHECK_HOST = ("8.8.8.8", 53)  # DNS 포트. 이름 해석 없이 연결만 확인
@@ -199,7 +209,44 @@ system_prompt = """당신은 한국어 시를 쓰는 시인입니다. 우아하�
 섬세하고 아름다운 한국어 시를 만드는 방법에 대해 신중하게 생각하세요.
 이것은 매우 중요하며, 지나치게 서투르거나 진부한 시는 피해야 합니다."""
 
-poem_format = "8줄 자유시 (한국어)"
+# 촬영할 때마다 이 중 하나를 무작위로 고릅니다. 폰트와 같은 방식입니다.
+# line_rule 의 {min}, {max} 는 그때의 폰트 크기로 계산한 글자 수로 채워집니다.
+# 형식마다 줄 길이 규칙이 다릅니다. 산문시는 줄을 나누지 않고 wrap_line() 에 맡깁니다.
+POEM_FORMS = [
+    {
+        "name": "자유시",
+        "structure": "전체 8줄 내외의 자유시로 쓰세요."
+                     " 3개의 연으로 나누고 연 사이에 빈 줄을 넣으세요.",
+        "line_rule": "각 줄은 공백 포함 {min}~{max}글자로 쓰세요.",
+    },
+    {
+        "name": "시조",
+        "structure": "초장, 중장, 종장 세 장으로 이루어진 시조로 쓰세요."
+                     " 각 장을 하나의 연으로 두고 연 사이에 빈 줄을 넣으세요."
+                     " 종장의 첫 마디는 세 글자로 시작하는 시조의 규칙을 지키세요.",
+        "line_rule": "각 장은 두 줄로 나누고, 각 줄은 공백 포함 {min}~{max}글자로 쓰세요.",
+    },
+    {
+        "name": "산문시",
+        "structure": "행을 나누지 않고 이어지는 문장으로 쓰는 산문시로 쓰세요."
+                     " 두세 개의 짧은 문단으로 나누고 문단 사이에 빈 줄을 넣으세요.",
+        "line_rule": "문단 안에서는 줄을 나누지 말고 문장을 이어서 쓰세요."
+                     " 문단마다 두세 문장이면 충분합니다.",
+    },
+    {
+        "name": "민요풍 7·5조",
+        "structure": "김소월의 시처럼 7자와 5자가 번갈아 나오는 7·5조 가락으로 쓰세요."
+                     " 3개의 연으로 나누고 각 연은 4줄, 연 사이에 빈 줄을 넣으세요.",
+        "line_rule": "가락을 지키는 것이 먼저입니다."
+                     " 한 줄이 공백 포함 {max}글자를 넘지 않게만 하세요.",
+    },
+    {
+        "name": "단시",
+        "structure": "군더더기를 모두 덜어낸 아주 짧은 시로 쓰세요."
+                     " 연을 나누지 말고 4줄 안에 끝내세요.",
+        "line_rule": "각 줄은 공백 포함 {min}~{max}글자로 쓰세요.",
+    },
+]
 
 
 ###########################
@@ -346,6 +393,16 @@ def calculate_chars_per_line(font_size=BODY_FONT_SIZE, width=WIDTH_DOTS):
     return max(int(usable_width(width) / average), 8)
 
 
+def calculate_line_range(font_size=BODY_FONT_SIZE, width=WIDTH_DOTS):
+    """폰트 크기에 맞는 한 줄 글자 수의 최소와 최대.
+
+    최대만 알려 주면 모델이 훨씬 짧게 써서 오른쪽이 30~50% 비어 버립니다.
+    채워야 할 하한을 함께 줘야 종이 폭을 제대로 씁니다.
+    """
+    maximum = calculate_chars_per_line(font_size, width)
+    return max(int(maximum * 0.8), 6), maximum
+
+
 ###########################
 # 한글 이미지 출력
 ###########################
@@ -416,14 +473,18 @@ def print_korean_text(text, font_size=BODY_FONT_SIZE):
 ###########################
 
 
+# 프린터 기본 폰트는 한 줄에 32칸입니다. 점선 한 줄이면 뜯을 자리가 분명해집니다.
+# 프린터 내장 문자만 쓰므로 아스키로 둡니다. 한글이나 가위 기호는 여기서 깨집니다.
+SEPARATOR_LINE = "- " * 16
+
+
 def print_separator():
     if printer is None:
         return
     try:
         printer.justify("C")
         printer.println()
-        printer.println("`'. .'`'. .'`'. .'`'. .'`'. .'`")
-        printer.println("   `     `     `     `     `   ")
+        printer.println(SEPARATOR_LINE)
         printer.println()
         printer.justify("L")
     except Exception as exc:
@@ -501,16 +562,22 @@ def print_footer():
 ###########################
 
 
-def build_prompt(chars_per_line):
+def build_prompt(form, min_chars, max_chars):
+    line_rule = form["line_rule"].format(min=min_chars, max=max_chars)
+
     return """%s
 
-제공된 이미지를 기반으로 다음 형식으로 한국어 시를 작성하세요: %s
+제공된 이미지를 기반으로 한국어 시를 작성하세요. 형식은 %s입니다.
+
+형식 규칙:
+%s
 
 중요한 제약사항:
 1. 첫 줄에 전체 주제를 관통하는 1-2단어 이내의 간결한 제목을 배치하세요
 2. 제목 다음 줄을 비우고 본문을 시작하세요
-3. 각 줄은 공백 포함 최대 %d글자를 넘지 않게 작성하세요. 공백은 반(1/2)글자로 계산합니다.
-4. 전체적으로 3연 구조를 따르며, 각 연 사이에 빈 줄을 넣어 명확히 구분하세요
+3. %s
+4. 좁은 영수증에 인쇄되므로, 짧은 줄만 이어지면 오른쪽이 휑하게 빕니다.
+   줄을 정해진 길이에 가깝게 채우되, 시의 형식에 맞는 것이 매우 중요합니다. 
 5. 이미지의 중앙에 보이는 주제에 집중하고, 제일 중요한 요소를 중심으로 시를 전개하세요
 
 시는 이미지에서 보이는 세부 사항을 자연스럽게 하나의 주제로 통합해야 합니다.
@@ -519,7 +586,60 @@ def build_prompt(chars_per_line):
 분위기, 대기, 사물, 색상 및 흥미로운 세부 사항에 집중하세요.
 
 한국어 시만 응답하고 다른 것은 응답하지 마세요.""" % (
-        system_prompt, poem_format, chars_per_line)
+        system_prompt, form["name"], form["structure"], line_rule)
+
+
+# 429 응답에 들어 있는 대기 시간. 형식이 두 가지라 둘 다 받습니다.
+#   retry_delay { seconds: 26 }   /   "retryDelay": "26s"
+RETRY_DELAY_PATTERN = re.compile(r"retry_?delay\D{0,30}?(\d+)", re.IGNORECASE)
+
+
+def parse_retry_delay(text):
+    """429 가 알려 준 대기 시간(초). 없거나 너무 길면 None."""
+    match = RETRY_DELAY_PATTERN.search(text)
+    if not match:
+        return None
+
+    seconds = int(match.group(1))
+    return seconds if 0 < seconds <= MAX_RETRY_WAIT else None
+
+
+def is_daily_quota(text):
+    """일일 한도인지. 분당 한도와 달리 기다려도 오늘 안에는 풀리지 않습니다."""
+    lowered = text.lower()
+    return "perday" in lowered or "per day" in lowered
+
+
+def generate_poem(model, parts):
+    """시를 생성합니다. 요청 한도에 걸리면 기다렸다 다시 시도합니다.
+
+    분당 한도는 잠깐 기다리면 풀리지만 일일 한도는 다음날까지 풀리지 않습니다.
+    구분하지 않고 재시도하면 될 일이 아닌데 1분을 버리고 같은 오류를 봅니다.
+    """
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        try:
+            return model.generate_content(parts)
+        except google_exceptions.ResourceExhausted as exc:
+            text = str(exc)
+
+            if is_daily_quota(text):
+                print("일일 요청 한도를 다 썼습니다. 오늘은 재시도해도 풀리지 않습니다.")
+                print("  한도 확인 : https://aistudio.google.com/apikey")
+                raise
+
+            if attempt == len(RETRY_DELAYS):
+                print("요청 한도가 %d번 재시도 뒤에도 풀리지 않았습니다."
+                      % len(RETRY_DELAYS))
+                raise
+
+            # 서버가 알려 준 시간이 있으면 그쪽을 따릅니다. 우리 추측보다 정확합니다.
+            wait = parse_retry_delay(text) or RETRY_DELAYS[attempt]
+            print("분당 요청 한도 초과. %d초 후 다시 시도합니다 (%d/%d)"
+                  % (wait, attempt + 1, len(RETRY_DELAYS)))
+
+            status_led.blink(COLOR_RETRY)
+            time.sleep(wait)
+            status_led.blink(COLOR_CAPTURE)
 
 
 def take_photo_and_print_poem():
@@ -554,11 +674,15 @@ def take_photo_and_print_poem():
         print("촬영 완료: %s" % image_path)
 
         model = genai.GenerativeModel("models/gemini-2.5-flash")
-        chars_per_line = calculate_chars_per_line()
+        # 폰트를 방금 골랐으므로 줄 길이도 그 폰트 기준으로 다시 계산합니다.
+        min_chars, max_chars = calculate_line_range()
+        form = random.choice(POEM_FORMS)
+        print("시 형식: %s / 한 줄 %d~%d자" % (form["name"], min_chars, max_chars))
 
         print("시 생성 중")
-        response = model.generate_content(
-            [build_prompt(chars_per_line), Image.open(image_path)])
+        response = generate_poem(
+            model,
+            [build_prompt(form, min_chars, max_chars), Image.open(image_path)])
         poem = response.text
 
         print("--------POEM BELOW-------")
