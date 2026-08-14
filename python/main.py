@@ -40,20 +40,20 @@ from thermal_raster import WIDTH_DOTS, print_image
 SHUTTER_PIN = 20        # 물리 핀 38
 PIXEL_PIN_NUMBER = 21   # 물리 핀 40
 PRINTER_PORT = "/dev/serial0"
-PRINTER_BAUD = 9600     # 이 프린터는 9600 고정. 다른 값은 전부 깨짐.
+PRINTER_BAUD = 9600     # 이 프린터는 9600 고정. 다른 프린터는 다를 수 있음.
 PRINTER_HEATTIME = 255  # 80/120/180/255 비교 후 선택한 값
 
 FONT_DIR = os.path.join(BASE_DIR, "fonts")
 IMAGE_DIR = os.path.join(BASE_DIR, "images")
 
-BODY_FONT_SIZE = 48
-TITLE_FONT_SIZE = 53
+BODY_FONT_SIZE = 38   # 실물 확인 후 조정한 값
+TITLE_FONT_SIZE = 40  # 본문보다 2도트 크게
 
 # 9600bps 에서는 보내는 도트 수가 곧 인쇄 시간입니다.
 # 빈 여백도 그대로 전송되므로 최소한만 둡니다.
-BLOCK_MARGIN = 6  # 덩어리 위아래 여백 (도트)
+BLOCK_MARGIN = 0  # 덩어리 위아래 여백 (도트)
 LINE_GAP = 6      # 줄 사이 간격 (도트)
-TEXT_MARGIN = 10  # 좌측 여백 (도트)
+TEXT_MARGIN = 6  # 좌측 여백 (도트)
 
 # 상태 표시 색상
 # 부팅~초기화: 빨강 고정 -> 준비 완료: 초록 고정
@@ -277,6 +277,56 @@ def load_font(size):
     return ImageFont.load_default()
 
 
+def usable_width(width=WIDTH_DOTS):
+    """좌우 여백과 볼드 효과를 뺀 실제로 글자를 그릴 수 있는 폭."""
+    return width - TEXT_MARGIN * 2 - 2
+
+
+def measure_text(font, text):
+    """폰트로 그렸을 때의 가로 폭(도트). 다음 글자가 시작할 위치까지 포함합니다."""
+    try:
+        return font.getlength(text)
+    except AttributeError:
+        # 아주 오래된 Pillow 대비. 잉크 폭이라 살짝 작게 나옵니다.
+        bbox = font.getbbox(text)
+        return bbox[2] - bbox[0]
+
+
+def wrap_line(line, font, max_width):
+    """실측 폭으로 한 줄을 나눕니다.
+
+    폰트마다 글자 폭이 크게 다릅니다. 손글씨 폰트는 같은 글자 수라도 고딕보다
+    훨씬 넓어 용지 밖으로 밀려납니다. 글자 수가 아니라 실제 픽셀 폭으로 끊습니다.
+    한국어는 띄어쓰기가 드물어 단어 단위로만 나누면 여전히 넘치므로,
+    단어 하나가 이미 폭을 넘으면 글자 단위로 끊습니다.
+    """
+    if not line or measure_text(font, line) <= max_width:
+        return [line]
+
+    wrapped = []
+    current = ""
+    for word in line.split(" "):
+        candidate = word if not current else current + " " + word
+        if measure_text(font, candidate) <= max_width:
+            current = candidate
+            continue
+
+        if current:
+            wrapped.append(current)
+            current = ""
+
+        for char in word:
+            if current and measure_text(font, current + char) > max_width:
+                wrapped.append(current)
+                current = char
+            else:
+                current += char
+
+    if current:
+        wrapped.append(current)
+    return wrapped
+
+
 def calculate_chars_per_line(font_size=BODY_FONT_SIZE, width=WIDTH_DOTS):
     """선택된 폰트 기준으로 한 줄에 들어갈 글자 수를 추정합니다."""
     font = load_font(font_size)
@@ -285,8 +335,7 @@ def calculate_chars_per_line(font_size=BODY_FONT_SIZE, width=WIDTH_DOTS):
     widths = []
     for char in sample:
         try:
-            bbox = font.getbbox(char)
-            widths.append(bbox[2] - bbox[0])
+            widths.append(measure_text(font, char))
         except Exception:
             widths.append(font_size)
 
@@ -294,9 +343,7 @@ def calculate_chars_per_line(font_size=BODY_FONT_SIZE, width=WIDTH_DOTS):
         return 12
 
     average = sum(widths) / float(len(widths))
-    # 좌우 여백 10픽셀씩과 볼드 효과 2픽셀을 제외한 실제 사용 폭
-    usable = width - 20 - 2
-    return max(int(usable / average), 8)
+    return max(int(usable_width(width) / average), 8)
 
 
 ###########################
@@ -312,6 +359,14 @@ def create_korean_block_image(lines, font_size=BODY_FONT_SIZE, width=WIDTH_DOTS)
     흰 공간이 됩니다. 한 덩어리로 그려 여백을 한 번만 넣습니다.
     """
     font = load_font(font_size)
+
+    # 용지 폭을 넘는 줄을 먼저 나눕니다. 여기서 걸러야 헤더, 시 본문, 푸터가
+    # 모두 같은 규칙으로 처리됩니다. 나누지 않으면 오른쪽이 조용히 잘립니다.
+    max_width = usable_width(width)
+    wrapped = []
+    for line in lines:
+        wrapped.extend(wrap_line(line, font, max_width))
+    lines = wrapped or [""]
 
     try:
         ascent, descent = font.getmetrics()
@@ -469,6 +524,7 @@ def build_prompt(chars_per_line):
 
 def take_photo_and_print_poem():
     global is_processing
+    global SELECTED_FONT_PATH
 
     if is_processing:
         print("이미 처리 중입니다. 완료될 때까지 기다려 주세요.")
@@ -483,6 +539,10 @@ def take_photo_and_print_poem():
     # 촬영과 시 생성 동안은 초록 점멸
     status_led.blink(COLOR_CAPTURE)
     print("사진 촬영 및 시 생성 시작")
+
+    # 시작할 때 한 번만 고르면 재부팅 전까지 계속 같은 폰트로 나옵니다.
+    # 찍을 때마다 다시 골라야 장마다 폰트가 달라집니다.
+    SELECTED_FONT_PATH = get_random_korean_font()
 
     image_path = None
     try:
@@ -546,8 +606,10 @@ signal.signal(signal.SIGINT, handle_keyboard_interrupt)
 def main():
     global SELECTED_FONT_PATH
 
+    # 시작할 때 한 번 골라 폰트가 실제로 있는지 확인합니다.
+    # 실제로 쓰는 폰트는 촬영할 때마다 다시 고릅니다.
     SELECTED_FONT_PATH = get_random_korean_font()
-    print("한 줄 최대 글자수: %d자" % calculate_chars_per_line())
+    print("한 줄 최대 글자수(이 폰트 기준): %d자" % calculate_chars_per_line())
 
     shutter_button.when_pressed = take_photo_and_print_poem
 
