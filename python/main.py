@@ -610,6 +610,16 @@ def is_daily_quota(text):
     return "perday" in lowered or "per day" in lowered
 
 
+def is_spend_cap(text):
+    """AI Studio 의 월 지출 상한에 걸렸는지.
+
+    요청 수 한도가 아니라 금액 한도라 429 로 오지만 성격이 다릅니다.
+    사람이 상한을 올려 주기 전에는 몇 초를 기다리든 그대로 실패합니다.
+    """
+    lowered = text.lower()
+    return "spending cap" in lowered or "spend cap" in lowered
+
+
 def generate_poem(model, parts):
     """시를 생성합니다. 요청 한도에 걸리면 기다렸다 다시 시도합니다.
 
@@ -621,6 +631,12 @@ def generate_poem(model, parts):
             return model.generate_content(parts)
         except google_exceptions.ResourceExhausted as exc:
             text = str(exc)
+
+            # 사람이 손대야 풀리는 것들은 기다리지 않고 바로 포기합니다.
+            if is_spend_cap(text):
+                print("월 지출 상한에 걸렸습니다. 기다려도 풀리지 않습니다.")
+                print("  상한 조정 : https://ai.studio/spend")
+                raise
 
             if is_daily_quota(text):
                 print("일일 요청 한도를 다 썼습니다. 오늘은 재시도해도 풀리지 않습니다.")
@@ -656,6 +672,8 @@ def describe_error(exc):
     text = str(exc)
 
     if isinstance(exc, google_exceptions.ResourceExhausted):
+        if is_spend_cap(text):
+            return "SPEND CAP REACHED", "RAISE IT AT ai.studio/spend"
         if is_daily_quota(text):
             return "DAILY LIMIT REACHED", "TRY AGAIN TOMORROW"
         return "TOO MANY REQUESTS", "WAIT A MINUTE AND RETRY"
