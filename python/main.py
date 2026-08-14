@@ -57,6 +57,10 @@ BLOCK_MARGIN = 0  # 덩어리 위아래 여백 (도트)
 LINE_GAP = 6      # 줄 사이 간격 (도트)
 TEXT_MARGIN = 6  # 좌측 여백 (도트)
 
+# 켜면 인쇄에 쓴 블록 이미지를 images/debug/ 에 PNG 로 남깁니다.
+# 종이에서 본 여백이 우리가 그린 것인지 프린터가 넣은 것인지 가릅니다.
+SAVE_BLOCK_IMAGES = False
+
 # 상태 표시 색상
 # 부팅~초기화: 빨강 고정 -> 준비 완료: 초록 고정
 # 촬영/시 생성: 초록 점멸 -> 인쇄: 파랑 점멸 -> 완료: 다시 초록 고정
@@ -252,15 +256,15 @@ POEM_FORMS = [
                      " 연을 나누지 말고 4줄 안에 끝내세요.",
         "line_rule": "각 줄은 공백 포함 {min}~{max}글자로 쓰세요.",
     },
-    {
-        "name": "절구풍 4행시",
-        "structure": "한시의 절구처럼 네 줄로 기승전결을 이루게 쓰세요."
-                     " 첫 줄에서 장면을 열고, 둘째 줄에서 이어받고,"
-                     " 셋째 줄에서 방향을 틀고, 넷째 줄에서 거두세요."
-                     " 연을 나누지 말고 네 줄로 끝내세요.",
-        "line_rule": "네 줄의 길이를 서로 비슷하게 맞추고,"
-                     " 각 줄은 공백 포함 {min}~{max}글자로 쓰세요.",
-    },
+ #   {
+ #       "name": "절구풍 4행시",
+ #       "structure": "한시의 절구처럼 네 줄로 기승전결을 이루게 쓰세요."
+ #                    " 첫 줄에서 장면을 열고, 둘째 줄에서 이어받고,"
+ #                    " 셋째 줄에서 방향을 틀고, 넷째 줄에서 거두세요."
+ #                    " 연을 나누지 말고 네 줄로 끝내세요.",
+ #       "line_rule": "네 줄의 길이를 서로 비슷하게 맞추고,"
+ #                    " 각 줄은 공백 포함 {min}~{max}글자로 쓰세요.",
+ #   },
     {
         "name": "하이쿠풍 3행시",
         "structure": "세 줄로 끝나는 아주 짧은 시로 쓰세요."
@@ -472,6 +476,29 @@ def create_korean_block_image(lines, font_size=BODY_FONT_SIZE, width=WIDTH_DOTS)
     return image.convert("1")
 
 
+_block_dump_index = 0
+
+
+def save_block_image(image, lines):
+    """인쇄한 블록 이미지를 그대로 파일로 남깁니다.
+
+    프린터에 보낸 것과 완전히 같은 이미지라, 종이에 보이는 여백이 이 PNG 에도
+    있으면 우리가 그린 것이고 없으면 프린터가 넣은 것입니다.
+    """
+    global _block_dump_index
+
+    try:
+        debug_dir = os.path.join(IMAGE_DIR, "debug")
+        os.makedirs(debug_dir, exist_ok=True)
+        _block_dump_index += 1
+        path = os.path.join(debug_dir, "block_%02d.png" % _block_dump_index)
+        image.save(path)
+        print("블록 %02d: %d도트 높이, %s"
+              % (_block_dump_index, image.size[1], lines[0][:16]))
+    except Exception as exc:
+        print("블록 이미지 저장 실패: %s" % exc)
+
+
 def print_korean_lines(lines, font_size=BODY_FONT_SIZE):
     """여러 줄을 한 번의 라스터 전송으로 인쇄합니다."""
     if printer is None:
@@ -483,6 +510,8 @@ def print_korean_lines(lines, font_size=BODY_FONT_SIZE):
 
     try:
         image = create_korean_block_image(lines, font_size=font_size)
+        if SAVE_BLOCK_IMAGES:
+            save_block_image(image, lines)
         print_image(printer, image, PRINTER_BAUD)
     except Exception as exc:
         print("한글 출력 실패 (%s): %s" % (" / ".join(lines), exc))
