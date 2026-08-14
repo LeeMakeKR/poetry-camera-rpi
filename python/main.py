@@ -74,6 +74,12 @@ RETRY_DELAYS = (5, 15, 45)
 # 셔터를 누른 사람을 몇 분씩 세워 둘 수는 없습니다.
 MAX_RETRY_WAIT = 60
 
+# 한 번의 시 생성 요청을 기다릴 최대 시간(초).
+# 이 값이 없으면 응답이 오지 않을 때 영원히 블록됩니다. 셔터 콜백은
+# gpiozero 스레드 하나로 돌아가므로, 여기서 굳으면 버튼이 아예 죽습니다.
+# 초록 점멸인 채로 멈춰 있던 원인이 이것입니다.
+REQUEST_TIMEOUT = 60
+
 # 네트워크가 끊기면 빨강 점멸로 알립니다. 시 생성에 인터넷이 필요합니다.
 NETWORK_CHECK_HOST = ("8.8.8.8", 53)  # DNS 포트. 이름 해석 없이 연결만 확인
 NETWORK_CHECK_TIMEOUT = 3
@@ -628,7 +634,8 @@ def generate_poem(model, parts):
     """
     for attempt in range(len(RETRY_DELAYS) + 1):
         try:
-            return model.generate_content(parts)
+            return model.generate_content(
+                parts, request_options={"timeout": REQUEST_TIMEOUT})
         except google_exceptions.ResourceExhausted as exc:
             text = str(exc)
 
@@ -756,10 +763,11 @@ def take_photo_and_print_poem():
         form = random.choice(POEM_FORMS)
         print("시 형식: %s / 한 줄 %d~%d자" % (form["name"], min_chars, max_chars))
 
-        print("시 생성 중")
-        response = generate_poem(
-            model,
-            [build_prompt(form, min_chars, max_chars), Image.open(image_path)])
+        print("시 생성 중 (최대 %d초 대기)" % REQUEST_TIMEOUT)
+        # with 로 닫아 줍니다. 열어 두면 촬영할 때마다 파일 핸들이 쌓입니다.
+        with Image.open(image_path) as photo:
+            response = generate_poem(
+                model, [build_prompt(form, min_chars, max_chars), photo])
         poem = response.text
 
         print("--------POEM BELOW-------")
