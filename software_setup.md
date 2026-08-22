@@ -7,7 +7,7 @@
 
 1. OS 이미지 굽기와 SSH 접속
 2. 라즈베리파이 인터페이스 설정
-3. 패키지 설치
+3. 시스템 업데이트와 패키지 설치
 4. 배선
 5. API 키 입력
 6. 와이파이 등록
@@ -88,6 +88,10 @@ ssh 사용자ID@IP주소
 
 ### 1단계. raspi-config 로 시리얼 켜기
 
+<img width="1024" alt="" src="pics/2026-06-04-151615.png">
+
+
+
 ```shell
 sudo raspi-config
 ```
@@ -155,7 +159,29 @@ groups
 `enable_uart=1` 과 `dtoverlay=disable-bt` 가 **둘 다** 출력되어야 합니다. 그리고 `/dev/serial0` 이 `ttyAMA0` 를 가리키면 정상입니다. `groups` 결과에 `dialout` 이 있으면 sudo 없이도 프린터에 접근할 수 있습니다.
 
 
-## 파트 3. 저장소와 패키지 설치
+## 파트 3. 시스템 업데이트와 패키지 설치
+
+### 1단계. 시스템 업데이트
+
+갓 내려받은 이미지도 릴리스 시점에 박제된 것이라, 그동안 나온 커널·펌웨어·보안 패치가 빠져 있습니다.
+
+파이썬 패키지를 올리기 전에 시스템을 먼저 최신으로 맞춥니다.
+
+```shell
+sudo apt update
+sudo apt full-upgrade -y
+sudo reboot
+```
+
+`upgrade` 가 아니라 **`full-upgrade`** 입니다. 
+
+라즈베리파이 OS 는 패키지 의존성이 바뀌는 일이 잦은데, 일반 `upgrade` 는 의존성이 바뀌는 패키지를 그냥 건너뜁니다.
+
+커널이나 펌웨어가 갱신되면 재부팅해야 반영되므로 `sudo reboot` 까지 함께 실행합니다.
+
+**제로 2W 에서는 시간이 걸립니다.**  진행이 멈춘 것처럼 보여도 기다리세요.
+
+### 2단계. 저장소와 파이썬 패키지 설치
 
 ```shell
 cd ~
@@ -165,6 +191,10 @@ pip3 install -r requirements.txt --break-system-packages
 ```
 
 라즈베리파이 OS(Bookworm 이후)는 시스템 파이썬을 보호하므로 `--break-system-packages` 가 필요합니다.
+
+여기까지 끝나면 **`apt full-upgrade` 를 다시 돌리지 마세요.** 
+
+picamera2 와 libcamera 는 apt 시스템 패키지라, 나중에 업그레이드하면 libcamera 가 통째로 바뀌면서 잘 돌던 카메라가 깨질 수 있습니다.
 
 
 ### 폴더 구조
